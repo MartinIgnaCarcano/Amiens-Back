@@ -11,7 +11,7 @@ def create_app():
     # Configuración de la base de datos
     
     db_path = os.path.join('/tmp', 'inventario.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/inventario.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     db.init_app(app)
