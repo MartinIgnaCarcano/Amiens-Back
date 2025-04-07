@@ -10,7 +10,11 @@ def create_app():
     CORS(app)  # Habilita CORS para la app
     # Configuración de la base de datos
     
-    db_path = os.path.join('/tmp', 'inventario.db')
+     # Asegurar carpeta persistente en Render
+    db_path = '/data/inventario.db'
+    os.makedirs('/data', exist_ok=True)
+
+    # Configuración de la base de datos SQLite persistente
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/inventario.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
