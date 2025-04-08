@@ -10,7 +10,7 @@ def create_app():
     CORS(app)
 
     # Usar la carpeta persistente que Render te asigna
-    db_dir = os.environ.get("RENDER_PERSISTENT_FS_PATH", "./data")
+    db_dir = os.environ.get("RENDER_PERSISTENT_FS_PATH", "./instance")
     os.makedirs(db_dir, exist_ok=True)
     db_path = os.path.join(db_dir, "inventario.db")
 
