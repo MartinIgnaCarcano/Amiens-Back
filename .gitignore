@@ -1,3 +1,0 @@
-# Ignora todos los archivos .db excepto inventario.db
-*.db
-!inventario.db
