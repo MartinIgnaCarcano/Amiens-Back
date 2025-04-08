@@ -10,8 +10,9 @@ def create_app():
     CORS(app)
 
     # Usar la carpeta persistente que Render te asigna
-    persist_path = os.environ.get('RENDER_PERSISTENT_FS_PATH', './')
-    db_path = os.path.join(persist_path, 'inventario.db')
+    db_dir = os.environ.get("RENDER_PERSISTENT_FS_PATH", "./data")
+    os.makedirs(db_dir, exist_ok=True)
+    db_path = os.path.join(db_dir, "inventario.db")
 
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
