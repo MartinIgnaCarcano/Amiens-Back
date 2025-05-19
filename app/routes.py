@@ -6,6 +6,7 @@ import json
 import jwt
 import os
 from flask_jwt_extended import verify_jwt_in_request,create_access_token
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 
@@ -20,6 +21,7 @@ auth_bp = Blueprint("auth", __name__)
 # Rutas para Usuarios -------------------
 #-------------------
 @auth_bp.route("/usuarios", methods=["GET"])
+@jwt_required()
 def listar_usuarios():
     try:
         usuarios = Usuario.query.all()
@@ -33,54 +35,45 @@ def listar_usuarios():
         return jsonify({"error": "Hubo un error al obtener los usuarios"}), 500
 
 @auth_bp.route("/rr", methods=["POST"])
+@jwt_required()
 def register():
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
 
-    if Usuario.query.filter_by(username=username).first():
-        return jsonify({"error": "Usuario ya existe"}), 400
+    usuario_id = get_jwt_identity()
+    if usuario_id != 1:
+        return jsonify({"error": "No tienes permiso para registrar usuarios"}), 403
+    else:
+        if Usuario.query.filter_by(username=username).first():
+            return jsonify({"error": "Usuario ya existe"}), 400
 
-    nuevo_usuario = Usuario(username=username)
-    nuevo_usuario.set_password(password)
-    db.session.add(nuevo_usuario)
-    db.session.commit()
+        nuevo_usuario = Usuario(username=username)
+        nuevo_usuario.set_password(password)
+        db.session.add(nuevo_usuario)
+        db.session.commit()
 
-    return jsonify({"message": "Usuario registrado con éxito"})
+        return jsonify({"message": "Usuario registrado con éxito"})
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    username = data.get("username")
+    userName = data.get("username")
     password = data.get("password")
+    print(f"Intento de login: {userName}")
+    print(f"Password: {password}")
+    if not userName or not password:
+        return jsonify({"error": "Faltan credenciales"}), 400
 
-    usuario = Usuario.query.filter_by(username=username).first()
+    user = Usuario.query.filter_by(username=userName).first()
 
-    if usuario and usuario.check_password(password):
-        #return jsonify({"access_token": token})
-        return jsonify({"usuario_id": usuario.id})
+    if not user or user.password != password:  # Cambiar si usás hash
+        return jsonify({"error": "Credenciales incorrectas"}), 401
 
-    return jsonify({"error": "Credenciales inválidas"}), 401
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify(access_token=access_token), 200
 
-@auth_bp.route("/usuarios/<int:id>", methods=["PUT"])
-def actualizar_usuario(id):
-    data = request.get_json()
-    usuario = Usuario.query.get(id)
-    if not usuario:
-        return jsonify({"error": "Usuario no encontrado"}), 404
-    try:
-        if "username" in data:
-            usuario.username = data["username"]
-        if "password" in data:
-            usuario.set_password(data["password"])
-        db.session.commit()
-        return jsonify({"mensaje": "Usuario actualizado correctamente"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
 
-@auth_bp.route("/usuarios/<int:id>", methods=["DELETE"])
-def eliminar_usuario(id):
     usuario = Usuario.query.get(id)
     if not usuario:
         return jsonify({"error": "Usuario no encontrado"}), 404
@@ -92,10 +85,18 @@ def eliminar_usuario(id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+
+@auth_bp.route('/islogged', methods=['GET'])
+@jwt_required()
+def protegido():
+    usuario_id = get_jwt_identity()
+    return jsonify({"mensaje": f"Acceso concedido al usuario {usuario_id}"})
+
 #-------------------
 # Rutas para Productos -------------------
 #-------------------
 @productos_bp.route('/productos', methods=['GET'])
+@jwt_required()
 def get_productos():
     productos = Producto.query.all()
     print(f"Productos encontrados: {len(productos)}")
@@ -110,11 +111,12 @@ def get_productos():
     } for p in productos])
 
 @productos_bp.route('/productos', methods=['POST'])
-def crear_productos_masivos():
+@jwt_required()
+def crear_producto():
     try:
         data = request.get_json()
         # Validación robusta
-            
+        print(data)
         nuevo_producto = Producto(
             descripcion=data['descripcion'],
             stock=int(data['stock']),
@@ -140,6 +142,7 @@ def crear_productos_masivos():
         }), 500
 
 @productos_bp.route('/productos/<int:id>', methods=['PATCH'])
+@jwt_required()
 def modificar_producto(id):
     data = request.json
     producto = Producto.query.get(id)
@@ -174,6 +177,7 @@ def modificar_producto(id):
         return jsonify({"error": str(e)}), 500
    
 @productos_bp.route('/productos/<int:id>', methods=['DELETE'])
+@jwt_required()
 def eliminar_producto(id):
     producto = Producto.query.get(id)
     if not producto:
@@ -195,6 +199,7 @@ def eliminar_producto(id):
 # Rutas para Extracciones -------------------
 #-------------------
 @productos_bp.route('/extracciones', methods=['GET'])
+@jwt_required()
 def listar_extracciones():
     extracciones = Extraccion.query.all()
     data = []
@@ -220,6 +225,7 @@ def listar_extracciones():
     return Response(json_str, mimetype='application/json')
 
 @productos_bp.route('/extracciones', methods=['POST'])
+@jwt_required()
 def crear_extraccion():
     data = request.json
     
@@ -245,7 +251,7 @@ def crear_extraccion():
         
         # 2. Crear la extracción si todo está OK
         nueva_extraccion = Extraccion(
-            usuario_id=data.get('usuario_id'),  # ID de usuario temporal
+            usuario_id= get_jwt_identity(),  # ID de usuario temporal
             descripcion=data.get('descripcion', 'Extracción sin descripción'),
             fecha= datetime.fromisoformat(data.get('fecha')) if data.get('fecha') else datetime.now()
         )
@@ -284,8 +290,7 @@ def crear_extraccion():
         db.session.rollback()
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
-@productos_bp.route('/extracciones/<int:id>', methods=['PATCH'])
-def modificar_extraccion(id):
+
     extraccion = Extraccion.query.get(id)
     
     if not extraccion:
@@ -311,6 +316,7 @@ def modificar_extraccion(id):
         return jsonify({"error": str(e)}), 500
     
 @productos_bp.route('/extracciones/<int:id>', methods=['DELETE'])
+@jwt_required()
 def eliminar_extraccion(id):
     try:
         data = request.get_json(silent=True) or {}
@@ -348,6 +354,7 @@ def eliminar_extraccion(id):
 #Rutas para Ingresos -------------------
 #-------------------
 @productos_bp.route("/ingresos", methods=["GET"])
+@jwt_required()
 def listar_ingresos():
     ingresos = Ingreso.query.all()
     resultado = []
@@ -365,6 +372,7 @@ def listar_ingresos():
     return jsonify(resultado)
 
 @productos_bp.route("/ingresos", methods=["POST"])
+@jwt_required()
 def registrar_ingreso():
     from datetime import datetime
     data = request.get_json()
@@ -381,7 +389,7 @@ def registrar_ingreso():
     
     try:
         nuevo_ingreso = Ingreso(
-            usuario_id=data.get("usuario_id", 1),  # temporal, mientras es pública
+            usuario_id=get_jwt_identity(),  # temporal, mientras es pública
             fecha=fecha
         )
         db.session.add(nuevo_ingreso)
@@ -422,6 +430,7 @@ def registrar_ingreso():
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
 @productos_bp.route('/ingresos/<int:id>', methods=['DELETE'])
+@jwt_required()
 def eliminar_ingreso(id):
     try:
         data = request.get_json(silent=True) or {}
