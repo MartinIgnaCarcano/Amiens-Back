@@ -14,7 +14,7 @@ class Producto(db.Model):
     def actualizar_estado(self):
         if self.stock<=0:
             self.estado = 'Sin Stock'
-        elif self.stock<self.stock_minimo:
+        elif self.stock<=self.stock_minimo:
             self.estado = 'Bajo Stock'
         else:
             self.estado = 'En Stock'
