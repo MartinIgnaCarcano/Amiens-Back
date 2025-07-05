@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify,Response
+from flask import Blueprint, request, jsonify,Response, current_app
 from app import db
 from app.models import Producto, Extraccion, DetalleExtraccion, Usuario,Ingreso, DetalleIngreso
 from datetime import datetime
@@ -13,19 +13,14 @@ SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 productos_bp = Blueprint('productos', __name__)
 auth_bp = Blueprint("auth", __name__)
 
-# @productos_bp.before_request
-# def proteger_rutas():
-#     verify_jwt_in_request()
-
-#-------------------
-# Rutas para Usuarios -------------------
-#-------------------
+#-------------------------------
+# Rutas para Autenticación -----
+#-------------------------------
 @auth_bp.route("/usuarios", methods=["GET"])
 @jwt_required()
 def listar_usuarios():
     try:
         usuarios = Usuario.query.all()
-        print(f"Usuarios encontrados: {len(usuarios)}")
         return jsonify([{
             "id": u.id,
             "username": u.username
@@ -55,8 +50,13 @@ def register():
 
         return jsonify({"message": "Usuario registrado con éxito"})
 
-@auth_bp.route('/login', methods=['POST'])
+@auth_bp.route('/login', methods=['POST','OPTIONS'])
 def login():
+    if request.method == 'OPTIONS':
+        # Esta respuesta explícita es CLAVE para evitar el error
+        response = current_app.make_default_options_response()
+        return response
+    
     data = request.get_json()
     userName = data.get("username")
     password = data.get("password")
@@ -67,23 +67,11 @@ def login():
 
     user = Usuario.query.filter_by(username=userName).first()
 
-    if not user or user.password != password:  # Cambiar si usás hash
+    if not user or not user.check_password(password):  # Cambiar si usás hash
         return jsonify({"error": "Credenciales incorrectas"}), 401
 
     access_token = create_access_token(identity=str(user.id))
     return jsonify(access_token=access_token), 200
-
-
-    usuario = Usuario.query.get(id)
-    if not usuario:
-        return jsonify({"error": "Usuario no encontrado"}), 404
-    try:
-        db.session.delete(usuario)
-        db.session.commit()
-        return jsonify({"mensaje": f"Usuario ID {id} eliminado"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
 
 
 @auth_bp.route('/islogged', methods=['GET'])
@@ -91,6 +79,26 @@ def login():
 def protegido():
     usuario_id = get_jwt_identity()
     return jsonify({"mensaje": f"Acceso concedido al usuario {usuario_id}"})
+
+@auth_bp.route('/cambiar-password', methods=['PUT'])
+def cambiar_password_dev():
+    data = request.get_json()
+    usuario_id = data.get("id")
+    nueva_password = data.get("password")
+
+    if not usuario_id or not nueva_password:
+        return jsonify({"error": "Faltan datos"}), 400
+
+    usuario = Usuario.query.get(usuario_id)
+
+    if not usuario:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+    usuario.set_password(nueva_password)
+    db.session.commit()
+
+    return jsonify({"message": f"Contraseña actualizada para usuario ID {usuario_id}"}), 200
+
 
 #-------------------
 # Rutas para Productos -------------------
